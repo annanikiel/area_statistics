@@ -1,22 +1,27 @@
 # Area statistics
-This project aims to provide a set of python files that can be used to calculate area statistics.
-It's particular application here is to generate statistics for the local parish.
+This project provides Python files to generate socio-economic statistics for bespoke areas like parishes, defined by digitized boundaries. The scripts are designed to be user-friendly for individuals with basic Python knowledge, with detailed instructions and code comments.This document walks you through the process of matching point location data to parish polygons, enabling extraction of comprehensive statistics like population structure, income levels, and housing characteristics.
 
 # Steps
 
-## Step 1: Geography data - Polygon
-In order to calculate the statistics for an arbitrary area (i.e. not the one already defined by ONS), we need to firsly have access to digitised boundary of the said area. Then the statistical geographies contained by the given boundary need to be found. ONS Output Areas (OA) are very small - covering up to 100 households, so can be used to approximate the arbitray area relatively well.
+## Step 1: Geography data
+To analyze an area not predefined by ONS, we first require its digitized boundary. Next, we identify the underlying ONS Output Areas (OAs) contained within that boundary, using a "points in polygon" script. This will return a list, which can then be used to match and aggregate OA Census data. OAs represent small units covering up to 100 households, making them ideal for approximating diverse user-defined areas.
 
-points_in_polygon.py file can be used to generate the list of OA approximating given area. This list can then be used to match census data and perform analysis.
-Firstly, the polygon data needs to be imported. Python can handle many different formats with external libraries. Depending on the format and structure of the file, the code may need to be adjusted. The aim is to extract the list of points and convert them, if needed to EPSG 27700 projection, as this is what is used in the UK by ONS and Ordnance Survey, and works best when printing maps / presenting them in documents.
-(For any presentation in online maps - EPSG 3857 needes to be used.
+The script in this repository was designed to work with specific types of files. Python, with the help of external libraries, can work with multitude of geographic files, however the structure may be different, so the script will require tweaking. The first step is to export POLYGON defining the area.
 
-The output of Step 1 should be a POLYGON.
+### A word about projections...
+Geograpical data can use a wide variety of projections. In order for the matching between points and polygon to work, both need to use the same projection. This script uses EPSG:27700 - the same projection as employed by Ordnance Survey and Office for National Statistics (ONS). The script includes an example of conversion.
 
-Sources: https://shapely.readthedocs.io/en/stable/
+EPSG:27700 is also designed to look best in printed materials, where maps are UK-focused. For this reason this is used throughout. For presentation on interactive maps online, EPSG:3857 is most commonly used, although the exact detail needes to be verified in documentation for the mapping library in use.
 
-## Step 2: Geographt data  - Points
-In this example, we are using Census 2021 OA weighted centroids as provided by the ONS. They are using the EPSG 27700 projection.
-...
+### A word about variables...
+In order to avoid commiting paths to file, and other details that are specific to the individual machine, these are stored in a seperate file, not commited to github. The examples of these "variable list files" are in the variables_examples folder. These need to be set and copied into the main directory before the scripts are run.
+
+
+### Resources for this step
+Python library manual: https://shapely.readthedocs.io/en/stable/
+Geo-tutorial: https://automating-gis-processes.github.io/2017/lessons/L3/point-in-polygon.html
+
+
+
 
 
