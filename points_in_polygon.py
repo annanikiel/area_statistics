@@ -11,7 +11,7 @@ import pyproj
 
 
 # Variables used in this file
-from variables_pip import polygon_p
+from variables_examples.variables_pip_example import polygon_p
 
 
 ############################################################
