@@ -11,7 +11,7 @@ import pyproj
 
 
 # Variables used in this file
-from variables_examples.variables_pip_example import polygon_p
+from variables_pip import polygon_p
 
 
 ############################################################
@@ -52,6 +52,8 @@ for x in polygon:
 # Define polygon
 pgon = Polygon(coords)
 # print(pgon)
+# print(pgon.area)
+# print (pgon.bounds)
 
 
 ############################################################
@@ -62,6 +64,18 @@ pgon = Polygon(coords)
 ############################################################
 
 # Determine extent of the polygon - only import points within it
+extent = pgon.bounds
+minx = extent[0]
+miny = extent[1]
+maxx = extent[2]
+maxy = extent[3]
+# Result: (378509.3723922186, 397460.89025646896, 381811.71099850745, 399914.02726411185)
+# Definition: (minx, miny, maxx, maxy)
+
+# Import a CSV with OA centroids (from ONS)
+
+
+
 # The aim is to narrow down the number of points we need to check are in the polygon; Min / max coords check will be faster than contains operation on all points
 # This can be done as they are being imported
 # At this point OA identifier and ID are retained.
