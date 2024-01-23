@@ -9,9 +9,11 @@ from shapely.ops import transform
 import geojson
 import pyproj
 
+import csv
+
 
 # Variables used in this file
-from variables_pip import polygon_p
+from variables_pip import polygon_p, points_file
 
 
 ############################################################
@@ -63,16 +65,36 @@ pgon = Polygon(coords)
 
 ############################################################
 
-# Determine extent of the polygon - only import points within it
+# Determine extent of the polygon - only import points within it + 300m buffer zone
 extent = pgon.bounds
-minx = extent[0]
-miny = extent[1]
-maxx = extent[2]
-maxy = extent[3]
 # Result: (378509.3723922186, 397460.89025646896, 381811.71099850745, 399914.02726411185)
 # Definition: (minx, miny, maxx, maxy)
 
+# Since ESPG:27700 operates in meters, we can simply add 300 meters to the coordinates/
+minx = extent[0] + 300
+miny = extent[1] + 300
+maxx = extent[2] + 300
+maxy = extent[3] + 300
+
+
 # Import a CSV with OA centroids (from ONS)
+# This code also converts the strings from CSV into floats, for numerical comparisons
+# Only points within the polygon extent are extracted (although all are checked)
+
+OA = []
+with open(points_file) as fp:
+    reader = csv.reader(fp, delimiter=",", quotechar='"')
+    next(reader, None)  # skip the headers
+
+    for row in reader:
+        x = float(row[3])
+        y = float(row[4])
+
+        if x >= minx and x <= maxx and y >= miny and y <= maxy:
+            OA.append([row[1],x,y])
+
+# print(OA)
+# print(len(OA))
 
 
 
