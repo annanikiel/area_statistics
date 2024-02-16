@@ -4,10 +4,12 @@
 ############################################################
 # 1. Libraries
 ############################################################
-from shapely.geometry import Point, Polygon
+#from shapely.geometry import Point, Polygon
+from shapely import Point, Polygon, contains
 from shapely.ops import transform
 import geojson
 import pyproj
+import folium
 
 import csv
 
@@ -76,6 +78,7 @@ miny = extent[1] + 300
 maxx = extent[2] + 300
 maxy = extent[3] + 300
 
+# buffer zone may need to be a veriable - as the size will need to be different,depending on the shape size.
 
 # Import a CSV with OA centroids (from ONS)
 # This code also converts the strings from CSV into floats, for numerical comparisons
@@ -93,8 +96,8 @@ with open(points_file) as fp:
         if x >= minx and x <= maxx and y >= miny and y <= maxy:
             OA.append([row[1],x,y])
 
-# print(OA)
-# print(len(OA))
+#print(OA)
+print(len(OA))
 
 
 
@@ -104,12 +107,27 @@ with open(points_file) as fp:
 
 
 # Of these within the extend, check which are within the polygon itself.
-# Output two lists - TRUE (in polygon); FALSE - not in polygon.
+OA_poly = []
+for item in OA:
+    id = item[0]
+    point_val = [item[1],item[2]]
+    point_geom = Point(item[1],item[2])
+
+    # Only output points in polygon
+    if contains(pgon,point_geom):
+        OA_poly.append([id,point_val])
+
+#print(OA_poly);
+print(len(OA_poly))
 
 
+# Check the difference between two lists (with uncommented print((len(list)))
+# OA_poly contains our final list.
 
-# Sense check - draw polygon and TRUE / FALSE OAs with their centroids to make sure the script worked as expected
-
+# Sense check - draw polygon and TRUE / FALSE OAs with their centroids to make sure the script worked as expected.
+# 
+m = folium.Map(location=(45.5236, -122.6750))
+m.save("index.html")
 
 # Remerge the OA names back to the points
 
