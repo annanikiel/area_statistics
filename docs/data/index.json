@@ -1,0 +1,154 @@
+{
+ "year": "2021",
+ "built": "2026-09-19",
+ "parish_names": {
+  "B006": "St James and All Souls"
+ },
+ "parishes": [
+  "B006"
+ ],
+ "output_areas": 78,
+ "areas": 1,
+ "overlaps": 0,
+ "empty_areas": [],
+ "tables": [
+  {
+   "dataset": "residents",
+   "title": "TS001 Usual residents",
+   "group": "Population and households",
+   "categories": 2
+  },
+  {
+   "dataset": "age",
+   "title": "TS007A Age by five-year bands",
+   "group": "Population and households",
+   "categories": 18
+  },
+  {
+   "dataset": "sex",
+   "title": "TS008 Sex",
+   "group": "Population and households",
+   "categories": 2
+  },
+  {
+   "dataset": "household_type",
+   "title": "TS003 Household composition",
+   "group": "Population and households",
+   "categories": 21
+  },
+  {
+   "dataset": "household_size",
+   "title": "TS017 Household size",
+   "group": "Population and households",
+   "categories": 9
+  },
+  {
+   "dataset": "religion",
+   "title": "TS030 Religion",
+   "group": "Religion, ethnicity and origin",
+   "categories": 9
+  },
+  {
+   "dataset": "ethnicity",
+   "title": "TS021 Ethnic group",
+   "group": "Religion, ethnicity and origin",
+   "categories": 24
+  },
+  {
+   "dataset": "country_of_birth",
+   "title": "TS004 Country of birth",
+   "group": "Religion, ethnicity and origin",
+   "categories": 13
+  },
+  {
+   "dataset": "language",
+   "title": "TS025 Household language",
+   "group": "Religion, ethnicity and origin",
+   "categories": 4
+  },
+  {
+   "dataset": "english",
+   "title": "TS029 Proficiency in English",
+   "group": "Religion, ethnicity and origin",
+   "categories": 6
+  },
+  {
+   "dataset": "passports",
+   "title": "TS005 Passports held",
+   "group": "Religion, ethnicity and origin",
+   "categories": 33
+  },
+  {
+   "dataset": "economic_activity",
+   "title": "TS066 Economic activity status",
+   "group": "Work, education and deprivation",
+   "categories": 30
+  },
+  {
+   "dataset": "occupation",
+   "title": "TS063 Occupation",
+   "group": "Work, education and deprivation",
+   "categories": 9
+  },
+  {
+   "dataset": "social_class",
+   "title": "TS062 National Statistics Socio-economic Classification",
+   "group": "Work, education and deprivation",
+   "categories": 9
+  },
+  {
+   "dataset": "qualifications",
+   "title": "TS067 Highest level of qualification",
+   "group": "Work, education and deprivation",
+   "categories": 7
+  },
+  {
+   "dataset": "deprivation",
+   "title": "TS011 Household deprivation",
+   "group": "Work, education and deprivation",
+   "categories": 5
+  },
+  {
+   "dataset": "tenure",
+   "title": "TS054 Tenure",
+   "group": "Housing and health",
+   "categories": 14
+  },
+  {
+   "dataset": "accommodation",
+   "title": "TS044 Accommodation type",
+   "group": "Housing and health",
+   "categories": 8
+  },
+  {
+   "dataset": "cars",
+   "title": "TS045 Car or van availability",
+   "group": "Housing and health",
+   "categories": 4
+  },
+  {
+   "dataset": "health",
+   "title": "TS037 General health",
+   "group": "Housing and health",
+   "categories": 5
+  },
+  {
+   "dataset": "disability",
+   "title": "TS038 Disability",
+   "group": "Housing and health",
+   "categories": 6
+  },
+  {
+   "dataset": "unpaid_care",
+   "title": "TS039 Provision of unpaid care",
+   "group": "Housing and health",
+   "categories": 8
+  }
+ ],
+ "groups": [
+  "Population and households",
+  "Religion, ethnicity and origin",
+  "Work, education and deprivation",
+  "Housing and health"
+ ]
+}

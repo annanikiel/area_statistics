@@ -1,2 +1,12 @@
 variables_pip.py
 process_geojson.py
+
+# Cached API downloads (ONS Open Geography / Nomis) - re-fetched on demand
+.api_cache/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Generated results (re-created by running the scripts)
+output/

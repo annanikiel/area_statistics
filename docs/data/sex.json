@@ -1,0 +1,1 @@
+{"dataset": "sex", "title": "TS008 Sex", "group": "Population and households", "categories": ["Female", "Male"], "depths": [0, 0], "hierarchical": false, "parishes": {"B006": {"total": 23254.0, "values": [11426.0, 11828.0]}}, "deaneries": {"B": {"total": 23254.0, "values": [11426.0, 11828.0]}, "Diocese": {"total": 23254.0, "values": [11426.0, 11828.0]}}}

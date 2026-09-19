@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Area Statistics</title>
+<meta name="description" content="Census 2021 statistics for bespoke areas, built from Output Area data.">
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --plane: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
+    --track: rgba(11,11,11,0.05);
+    --radius: 10px;
+    --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --plane: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --track: rgba(255,255,255,0.06);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --plane: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --track: rgba(255,255,255,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--text-primary);
+    font-family: var(--font); font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 64px; }
+
+  header { border-bottom: 1px solid var(--border); background: var(--surface-1); }
+  .head-inner { max-width: 1100px; margin: 0 auto; padding: 24px 16px 20px; }
+  h1 { font-size: 1.55rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-secondary); font-size: 0.92rem; margin: 0; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-top: 18px;
+  }
+  label.ctl { display: flex; align-items: center; gap: 6px;
+    font-size: 0.85rem; color: var(--text-secondary); }
+  select, button {
+    font: inherit; font-size: 0.85rem; color: var(--text-primary);
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer;
+  }
+  select:focus-visible, button:focus-visible {
+    outline: 2px solid var(--series-1); outline-offset: 2px;
+  }
+  button[aria-pressed="true"] {
+    background: var(--series-1); color: #fff; border-color: transparent;
+  }
+  .spacer { flex: 1 1 auto; }
+
+  /* Stat tiles - the number is the chart */
+  .tiles {
+    display: grid; gap: 12px; margin: 28px 0 8px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+  }
+  .tile .val { font-size: 1.9rem; font-weight: 650; letter-spacing: -0.02em;
+    line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .tile .lab { font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px; }
+
+  /* Group navigation */
+  nav.groups { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 4px; }
+  nav.groups button { border-radius: 999px; }
+
+  /* Table cards */
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-top: 16px;
+  }
+  .card-head { display: flex; flex-wrap: wrap; gap: 8px;
+    align-items: baseline; margin-bottom: 4px; }
+  .card h3 { font-size: 1rem; margin: 0; font-weight: 600; }
+  .card .meta { font-size: 0.78rem; color: var(--muted); }
+  .card-actions { margin-left: auto; display: flex; gap: 6px; }
+  .card-actions button { padding: 4px 9px; font-size: 0.78rem; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 14px;
+    font-size: 0.8rem; color: var(--text-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+
+  /* Bar rows */
+  .rows { margin-top: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .row {
+    display: grid; grid-template-columns: minmax(120px, 34%) 1fr;
+    gap: 12px; align-items: center; padding: 3px 4px; border-radius: 6px;
+  }
+  .row:hover { background: var(--track); }
+  .row .cat { font-size: 0.82rem; color: var(--text-secondary);
+    overflow-wrap: anywhere; }
+  .bars { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .bar-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .track { flex: 1 1 auto; height: 13px; background: var(--track);
+    border-radius: 3px; min-width: 0; }
+  .fill { height: 100%; border-radius: 3px 4px 4px 3px; min-width: 2px;
+    transition: width .18s ease; }
+  .val {
+    font-size: 0.78rem; font-variant-numeric: tabular-nums;
+    color: var(--text-secondary); white-space: nowrap; flex: none;
+    min-width: 66px; text-align: right;
+  }
+
+  /* Data table view */
+  table { border-collapse: collapse; width: 100%; margin-top: 12px;
+    font-size: 0.82rem; }
+  th, td { text-align: right; padding: 6px 8px;
+    border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left;
+    font-variant-numeric: normal; }
+  thead th { color: var(--text-secondary); font-weight: 600;
+    border-bottom: 1px solid var(--baseline); }
+
+  .note { font-size: 0.82rem; color: var(--text-secondary);
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-left: 3px solid var(--series-2);
+    border-radius: 8px; padding: 12px 14px; margin-top: 20px; }
+  .note strong { color: var(--text-primary); }
+
+  footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);
+    font-size: 0.8rem; color: var(--muted); }
+  a { color: var(--series-1); }
+
+  @media (max-width: 560px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .val { min-width: 58px; }
+    h1 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-inner">
+    <h1>Area Statistics</h1>
+    <p class="sub" id="subtitle">Loading…</p>
+    <div class="controls">
+      <label class="ctl">Area
+        <select id="parish"></select>
+      </label>
+      <label class="ctl">Show
+        <select id="measure">
+          <option value="pct">Percentages</option>
+          <option value="count">Counts</option>
+        </select>
+      </label>
+      <button id="compare" aria-pressed="false">Compare to deanery &amp; diocese</button>
+      <span class="spacer"></span>
+      <button id="theme" title="Switch between light and dark">Theme</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="tiles" id="tiles"></section>
+  <nav class="groups" id="groups"></nav>
+  <section id="content"></section>
+  <div class="note" id="caveats"></div>
+  <footer id="footer"></footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var DATA = window.CENSUS_DATA;
+  if (!DATA) {
+    document.getElementById("subtitle").textContent =
+      "Could not load data.js — run build_all.py to generate it.";
+    return;
+  }
+
+  var index = DATA.index;
+  var tables = DATA.tables;
+
+  // Categorical slots 1-3, validated all-pairs in both modes.
+  var SERIES = ["--series-1", "--series-2", "--series-3"];
+
+  var state = {
+    parish: index.parishes[0],
+    measure: "pct",
+    compare: false,
+    group: index.groups[0]
+  };
+
+  // ---- helpers -----------------------------------------------------------
+
+  function fmtCount(v) {
+    if (v === null || v === undefined) return "—";
+    return Math.round(v).toLocaleString("en-GB");
+  }
+
+  function fmtPct(v) {
+    if (v === null || v === undefined) return "—";
+    return (v * 100).toFixed(1) + "%";
+  }
+
+  function parishLabel(id) {
+    return (index.parish_names && index.parish_names[id]) || id;
+  }
+
+  /* Which rows to draw: the parish alone, or the parish against its deanery
+     and the diocese. The deanery is found from the parish's own row. */
+  function seriesFor(table) {
+    var rows = [{ label: parishLabel(state.parish),
+                  data: table.parishes[state.parish] }];
+    if (!state.compare) return rows;
+
+    var deaneryIds = Object.keys(table.deaneries).filter(function (k) {
+      return k !== "Diocese";
+    });
+    if (deaneryIds.length === 1) {
+      rows.push({ label: "Deanery " + deaneryIds[0],
+                  data: table.deaneries[deaneryIds[0]] });
+    } else if (index.parish_deanery && index.parish_deanery[state.parish]) {
+      var d = index.parish_deanery[state.parish];
+      if (table.deaneries[d]) {
+        rows.push({ label: "Deanery " + d, data: table.deaneries[d] });
+      }
+    }
+    if (table.deaneries.Diocese) {
+      rows.push({ label: "Diocese", data: table.deaneries.Diocese });
+    }
+    return rows.filter(function (r) { return r.data; });
+  }
+
+  function valueOf(row, i) {
+    var raw = row.data.values[i];
+    if (raw === null || raw === undefined) return null;
+    if (state.measure === "count") return raw;
+    return row.data.total ? raw / row.data.total : null;
+  }
+
+  // ---- rendering ---------------------------------------------------------
+
+  function renderBars(table, rows) {
+    /* One scale across every series so the bars are comparable. In
+       percentage mode that is the largest share; in counts, the largest
+       count. Never two scales on one plot. */
+    var max = 0;
+    table.categories.forEach(function (_, i) {
+      rows.forEach(function (r) {
+        var v = valueOf(r, i);
+        if (v !== null && v > max) max = v;
+      });
+    });
+    if (max <= 0) max = 1;
+
+    var fmt = state.measure === "count" ? fmtCount : fmtPct;
+    var html = '<div class="rows">';
+
+    table.categories.forEach(function (cat, i) {
+      var depth = (table.depths && table.depths[i]) || 0;
+      html += '<div class="row"><div class="cat"' +
+              (depth ? ' style="padding-left:' + depth * 14 + 'px"' : "") +
+              ">" + esc(cat) + "</div>";
+      html += '<div class="bars">';
+      rows.forEach(function (r, s) {
+        var v = valueOf(r, i);
+        var pct = v === null ? 0 : (v / max) * 100;
+        var tip = r.label + " — " + esc(cat) + ": " + fmt(v);
+        html += '<div class="bar-line" title="' + esc(tip) + '">'
+             +  '<div class="track"><div class="fill" style="width:' +
+                pct.toFixed(2) + "%;background:var(" + SERIES[s % 3] + ')"></div></div>'
+             +  '<div class="val">' + fmt(v) + "</div></div>";
+      });
+      html += "</div></div>";
+    });
+
+    return html + "</div>";
+  }
+
+  function renderTable(table, rows) {
+    var fmt = state.measure === "count" ? fmtCount : fmtPct;
+    var html = "<table><thead><tr><th>Category</th>";
+    rows.forEach(function (r) { html += "<th>" + esc(r.label) + "</th>"; });
+    html += "</tr></thead><tbody>";
+
+    table.categories.forEach(function (cat, i) {
+      var d = (table.depths && table.depths[i]) || 0;
+      html += "<tr><td" + (d ? ' style="padding-left:' + (8 + d * 14) + 'px"' : "") +
+              ">" + esc(cat) + "</td>";
+      rows.forEach(function (r) { html += "<td>" + fmt(valueOf(r, i)) + "</td>"; });
+      html += "</tr>";
+    });
+
+    html += "<tr><td><strong>Total</strong></td>";
+    rows.forEach(function (r) {
+      html += "<td><strong>" + fmtCount(r.data.total) + "</strong></td>";
+    });
+    return html + "</tr></tbody></table>";
+  }
+
+  function renderCard(meta) {
+    var table = tables[meta.dataset];
+    if (!table) return "";
+    var rows = seriesFor(table);
+    var showTable = cardViews[meta.dataset] === "table";
+
+    var html = '<div class="card" id="card-' + meta.dataset + '">'
+      + '<div class="card-head"><h3>' + esc(table.title) + "</h3>"
+      + '<span class="meta">' + table.categories.length + " categories"
+      + (table.hierarchical
+         ? " · nested, so sub-categories are counted inside their parent"
+         : "") + "</span>"
+      + '<span class="card-actions">'
+      + '<button data-view="' + meta.dataset + '" aria-pressed="'
+      + (showTable ? "true" : "false") + '">Table</button></span></div>';
+
+    // A legend whenever more than one series is on screen; a single series
+    // is named by the heading above it.
+    if (rows.length > 1) {
+      html += '<div class="legend">';
+      rows.forEach(function (r, s) {
+        html += "<span><i class=\"swatch\" style=\"background:var(" +
+                SERIES[s % 3] + ")\"></i>" + esc(r.label) + "</span>";
+      });
+      html += "</div>";
+    }
+
+    html += showTable ? renderTable(table, rows) : renderBars(table, rows);
+    return html + "</div>";
+  }
+
+  var cardViews = {};
+
+  function renderTiles() {
+    var tiles = [];
+    var sex = tables.sex, religion = tables.religion,
+        dep = tables.deprivation, health = tables.health;
+
+    function totalFor(t) {
+      return t && t.parishes[state.parish] ? t.parishes[state.parish].total : null;
+    }
+    function shareOf(t, match) {
+      if (!t || !t.parishes[state.parish]) return null;
+      var row = t.parishes[state.parish], sum = 0, hit = false;
+      t.categories.forEach(function (c, i) {
+        if (match(String(c).toLowerCase())) { sum += row.values[i] || 0; hit = true; }
+      });
+      return hit && row.total ? sum / row.total : null;
+    }
+
+    var residents = totalFor(sex) || totalFor(tables.residents);
+    if (residents) tiles.push([fmtCount(residents), "Usual residents"]);
+
+    var christian = shareOf(religion, function (c) { return c === "christian"; });
+    if (christian !== null) tiles.push([fmtPct(christian), "Christian"]);
+
+    var deprived = shareOf(dep, function (c) { return c.indexOf("not deprived") === -1; });
+    if (deprived !== null) tiles.push([fmtPct(deprived), "Deprived in 1+ dimension"]);
+
+    var badHealth = shareOf(health, function (c) {
+      return c.indexOf("bad health") !== -1;
+    });
+    if (badHealth !== null) tiles.push([fmtPct(badHealth), "Bad or very bad health"]);
+
+    document.getElementById("tiles").innerHTML = tiles.map(function (t) {
+      return '<div class="tile"><div class="val">' + t[0] +
+             '</div><div class="lab">' + t[1] + "</div></div>";
+    }).join("");
+  }
+
+  function render() {
+    renderTiles();
+
+    document.getElementById("subtitle").textContent =
+      parishLabel(state.parish) + " · Census " + index.year + " · " +
+      index.output_areas.toLocaleString("en-GB") + " Output Areas · built " +
+      index.built;
+
+    document.getElementById("groups").innerHTML = index.groups.map(function (g) {
+      return '<button data-group="' + esc(g) + '" aria-pressed="' +
+             (g === state.group) + '">' + esc(g) + "</button>";
+    }).join("");
+
+    var metas = index.tables.filter(function (t) { return t.group === state.group; });
+    document.getElementById("content").innerHTML =
+      metas.map(renderCard).join("");
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;",
+               '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- wiring ------------------------------------------------------------
+
+  var parishSelect = document.getElementById("parish");
+  parishSelect.innerHTML = index.parishes.map(function (p) {
+    return '<option value="' + esc(p) + '">' + esc(parishLabel(p)) + "</option>";
+  }).join("");
+  if (index.parishes.length < 2) {
+    parishSelect.disabled = true;
+    parishSelect.title = "Only one area in this build";
+  }
+
+  parishSelect.addEventListener("change", function (e) {
+    state.parish = e.target.value; render();
+  });
+
+  document.getElementById("measure").addEventListener("change", function (e) {
+    state.measure = e.target.value; render();
+  });
+
+  var compareButton = document.getElementById("compare");
+  compareButton.addEventListener("click", function () {
+    state.compare = !state.compare;
+    compareButton.setAttribute("aria-pressed", String(state.compare));
+    render();
+  });
+
+  document.getElementById("groups").addEventListener("click", function (e) {
+    var group = e.target.getAttribute("data-group");
+    if (group) { state.group = group; render(); }
+  });
+
+  document.getElementById("content").addEventListener("click", function (e) {
+    var dataset = e.target.getAttribute("data-view");
+    if (!dataset) return;
+    cardViews[dataset] = cardViews[dataset] === "table" ? "bars" : "table";
+    render();
+  });
+
+  var themeButton = document.getElementById("theme");
+  try {
+    var saved = localStorage.getItem("area-stats-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  } catch (err) { /* private browsing - the OS setting still applies */ }
+
+  themeButton.addEventListener("click", function () {
+    var current = document.documentElement.getAttribute("data-theme");
+    if (!current) {
+      current = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "light";
+    }
+    var next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem("area-stats-theme", next); } catch (err) {}
+  });
+
+  // ---- caveats worth stating on the page itself --------------------------
+
+  var caveats = [
+    "<strong>Figures are approximations.</strong> An area is built from whole " +
+    "Output Areas whose population-weighted centroid falls inside its boundary, " +
+    "so the edges do not follow the boundary exactly.",
+    "<strong>Totals differ slightly between tables.</strong> ONS applies " +
+    "statistical disclosure control to each table independently, so small-area " +
+    "totals can vary by a few people. That is expected, not an error.",
+    "<strong>Religion is not broken down by denomination.</strong> The England " +
+    "and Wales Census asks religion but not which Christian denomination, so " +
+    "&ldquo;Christian&rdquo; is the finest level available."
+  ];
+  if (index.overlaps) {
+    caveats.push("<strong>" + index.overlaps + " Output Area(s) fall inside " +
+      "more than one boundary</strong> and are counted more than once in the " +
+      "deanery and diocese totals.");
+  }
+  if (index.empty_areas && index.empty_areas.length) {
+    caveats.push("<strong>" + index.empty_areas.length + " area(s) matched no " +
+      "Output Areas</strong>: " + esc(index.empty_areas.slice(0, 5).join(", ")) + ".");
+  }
+  document.getElementById("caveats").innerHTML = caveats.join("<br><br>");
+
+  document.getElementById("footer").innerHTML =
+    "Source: <a href=\"https://www.nomisweb.co.uk/\">Nomis</a> (Census " +
+    index.year + ") and the <a href=\"https://geoportal.statistics.gov.uk/\">" +
+    "ONS Open Geography Portal</a>. Contains public sector information " +
+    "licensed under the Open Government Licence v3.0. " +
+    "<a href=\"sense_check_map.html\">Boundary map</a>.";
+
+  render();
+})();
+</script>
+</body>
+</html>
