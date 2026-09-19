@@ -30,6 +30,7 @@ our code:
 Settings come from variables_pip.py - see variables_examples/ for a template.
 """
 
+import os
 import warnings
 
 import pandas as pd
@@ -203,7 +204,7 @@ def extract_relevant_rows(deanery_agg, parish_agg, parish_id, deanery_id,
 
 
 def process_year_data(year, datasets, all_data_output, report_data_output,
-                      oas, parish, deanery, parish_name="Parish"):
+                      oas, parish, deanery, parish_name=None):
     """
     Processes every dataset for a given year.
 
@@ -215,15 +216,24 @@ def process_year_data(year, datasets, all_data_output, report_data_output,
         oas (str): Path to the OA lookup CSV from step 1.
         parish (list): ParishIDs to report on.
         deanery (list): Deanery codes to report on.
-        parish_name (str): Label to use for the parish row in the report.
+        parish_name (str or dict): Label for the parish row(s). Leave as None
+            to use the names recorded in the lookup file.
     """
     oa_data = pd.read_csv(oas)
     oa_codes = oa_data[OA_COLUMN].dropna().unique().tolist()
     print(f"{year}: {len(oa_codes)} Output Areas in the lookup")
 
-    # Find the output folders for this year.
+    # The lookup already carries each parish's name, so use it rather than
+    # labelling the row with a bare code.
+    if parish_name is None and "Name" in oa_data.columns:
+        parish_name = (oa_data.drop_duplicates(PARISH_COLUMN)
+                       .set_index(PARISH_COLUMN)["Name"].to_dict())
+
+    # Find the output folders for this year, and make sure they exist.
     folder_full = [e["path"] for e in all_data_output if e["year"] == year][0]
     folder_report = [e["path"] for e in report_data_output if e["year"] == year][0]
+    for folder in (folder_full, folder_report):
+        os.makedirs(folder, exist_ok=True)
 
     for item in datasets:
         dataset = load_dataset(item, oa_codes)
