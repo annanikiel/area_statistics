@@ -1,140 +1,341 @@
+"""
+Step 1: work out which Output Areas make up a bespoke area (e.g. a parish).
 
-# Given a polygon and points, this script outputs and exports a list of points inside the polygon.
+Given a digitised boundary, this finds every ONS Output Area whose population
+weighted centroid falls inside it, and writes that list out for step 2
+(data_aggregates.py) to use.
 
-############################################################
-# 1. Libraries
-############################################################
-#from shapely.geometry import Point, Polygon
-from shapely import Point, Polygon, contains
-from shapely.ops import transform
-import geojson
-import pyproj
-import folium
+*** How it works ***
+
+  1. Read the boundary and reproject it to EPSG:27700 (the Ordnance Survey /
+     ONS projection this project uses throughout).
+  2. Take the bounding box of the boundary and widen it by a buffer.
+  3. Ask the ONS Open Geography Portal for the OA centroids in that box.
+     Only that handful is downloaded, not the ~190,000-point national file.
+  4. Test each of those centroids against the boundary itself.
+  5. Write the result as JSON (for reference) and CSV (the lookup table that
+     step 2 consumes), plus a map so you can eyeball that it worked.
+
+*** A word about projections ***
+
+Points and polygon must be in the same projection for the matching to work.
+EPSG:27700 is used here because it is what ONS publishes in and because it
+measures in metres, which makes the buffer easy to reason about. The source
+projection of your boundary is read from the file where it is declared, and
+guessed from the coordinates otherwise.
+
+*** How to run ***
+
+    python3 points_in_polygon.py
+
+Settings come from variables_pip.py - see variables_examples/ for a template.
+"""
 
 import csv
+import json
+import os
 
+import pyproj
+from shapely.geometry import Point, shape
+from shapely.ops import transform, unary_union
+from shapely import force_2d
 
-# Variables used in this file
-from variables_pip import polygon_p, points_file
-
-
-############################################################
-# 2. Polygon
-
-# Import the boundaries file
-## NOTICE: depending on the format and structure of the file, this may need tweaking. 
-## We want x,y coordinates of points making up the polygon in the same projection as points in next step.
-## ESPG:27700 is used throughout this project
-
-with open(polygon_p) as polygon:
-    poly_coords = geojson.load(polygon)
-
-polygon = poly_coords['features'][0]['geometry']['coordinates']
-#print(polygon)
-
-# The projection of coordinates needs to be known. (In this case it is ESPG:3857)
-# In case they are not EPSG:27700, they will need to be converted.
-epsg_3857 = pyproj.CRS('EPSG:3857')
-epsg_27700 = pyproj.CRS('EPSG:27700')
-
-# Create the polygon
-## NOTICE: This may need tweaking depending on the file structure
-coords = [];
-for x in polygon:
-    for y in x:
-        for point in y:
-            p_epsg_3857 = Point(point[0], point[1])
-            project =  pyproj.Transformer.from_crs(epsg_3857, epsg_27700, always_xy=True).transform
-            point = transform(project,p_epsg_3857)
-
-            # May need to convert tuples into points
-            
-            coords.append(point)
-
-#print(coords)
-
-# Define polygon
-pgon = Polygon(coords)
-# print(pgon)
-# print(pgon.area)
-# print (pgon.bounds)
+import census_api
 
 
 ############################################################
-
-# Since for the parish maps, we will have one polygon, and may points (OA centroids), it makes sense to read check if polygon contains the point.
-# The result is a list of OA which centroid fall within the extend of a given boundary with an information to indicate if they are within the polygon, or not.
-
+# 1. Settings that rarely change
 ############################################################
 
-# Determine extent of the polygon - only import points within it + 300m buffer zone
-extent = pgon.bounds
-# Result: (378509.3723922186, 397460.89025646896, 381811.71099850745, 399914.02726411185)
-# Definition: (minx, miny, maxx, maxy)
+# The projection everything is converted into before matching.
+TARGET_CRS = "EPSG:27700"
 
-# Since ESPG:27700 operates in meters, we can simply add 300 meters to the coordinates/
-minx = extent[0] + 300
-miny = extent[1] + 300
-maxx = extent[2] + 300
-maxy = extent[3] + 300
+# How far beyond the boundary's bounding box to look for centroids, in metres.
+# This only widens the shortlist - the real test is still the boundary itself -
+# so a generous value costs very little.
+DEFAULT_BUFFER_M = 300
 
-# buffer zone may need to be a veriable - as the size will need to be different,depending on the shape size.
-
-# Import a CSV with OA centroids (from ONS)
-# This code also converts the strings from CSV into floats, for numerical comparisons
-# Only points within the polygon extent are extracted (although all are checked)
-
-OA = []
-with open(points_file) as fp:
-    reader = csv.reader(fp, delimiter=",", quotechar='"')
-    next(reader, None)  # skip the headers
-
-    for row in reader:
-        x = float(row[3])
-        y = float(row[4])
-
-        if x >= minx and x <= maxx and y >= miny and y <= maxy:
-            OA.append([row[1],x,y])
-
-#print(OA)
-print(len(OA))
-
-
-
-# The aim is to narrow down the number of points we need to check are in the polygon; Min / max coords check will be faster than contains operation on all points
-# This can be done as they are being imported
-# At this point OA identifier and ID are retained.
-
-
-# Of these within the extend, check which are within the polygon itself.
-OA_poly = []
-for item in OA:
-    id = item[0]
-    point_val = [item[1],item[2]]
-    point_geom = Point(item[1],item[2])
-
-    # Only output points in polygon
-    if contains(pgon,point_geom):
-        OA_poly.append([id,point_val])
-
-#print(OA_poly);
-print(len(OA_poly))
-
-
-# Check the difference between two lists (with uncommented print((len(list)))
-# OA_poly contains our final list.
-
-# Sense check - draw polygon and TRUE / FALSE OAs with their centroids to make sure the script worked as expected.
-# 
-m = folium.Map(location=(45.5236, -122.6750))
-m.save("index.html")
-
-# Remerge the OA names back to the points
-
-# The final output is a list (JSON) of OAs making inside a given area.
-
+# Which GeoJSON property maps to which output column. The defaults match the
+# parish boundary files used in this project; adjust if yours differ.
+PROPERTY_MAP = {
+    "id": "ParishID",
+    "name": "Name",
+    "loc": "Location",
+    "dean": "Deanery",
+}
 
 
 ############################################################
+# 2. Reading the boundary
+############################################################
+
+def detect_crs(data):
+    """
+    Work out what projection a GeoJSON file is in.
+
+    Tried in order:
+      1. A 'crs' member in the file (older GeoJSON exports include one).
+      2. A guess from the size of the coordinates.
+      3. EPSG:4326, which the GeoJSON standard says to assume.
+
+    Returns:
+        str: e.g. 'EPSG:3857'
+    """
+    # 1. Declared in the file?
+    crs = data.get("crs")
+    if isinstance(crs, dict):
+        name = (crs.get("properties") or {}).get("name", "")
+        # Names look like 'urn:ogc:def:crs:EPSG::3857' or 'EPSG:3857'
+        if "EPSG" in str(name):
+            code = str(name).replace(":", " ").split()[-1]
+            if code.isdigit():
+                return f"EPSG:{code}"
+
+    # 2. Guess from the magnitude of the first coordinate.
+    node = data["features"][0]["geometry"]["coordinates"]
+    while isinstance(node, list) and node and isinstance(node[0], list):
+        node = node[0]
+    x, y = abs(node[0]), abs(node[1])
+
+    if x <= 180 and y <= 90:
+        return "EPSG:4326"          # degrees
+    if x <= 700000 and y <= 1300000:
+        return "EPSG:27700"         # British National Grid, in metres
+    return "EPSG:3857"              # Web Mercator, in much larger metres
 
 
+def load_boundary(path, source_crs=None, target_crs=TARGET_CRS):
+    """
+    Load a boundary file and return it as a Shapely geometry in target_crs.
+
+    Handles Polygon and MultiPolygon, boundaries with holes, files with several
+    features, and coordinates that carry an elevation value.
+
+    Args:
+        path (str): Path to the GeoJSON file.
+        source_crs (str): Override the file's projection, e.g. 'EPSG:3857'.
+        target_crs (str): Projection to convert into.
+
+    Returns:
+        tuple: (geometry, properties dict from the first feature)
+    """
+    with open(path) as handle:
+        data = json.load(handle)
+
+    features = data.get("features")
+    if not features:
+        raise ValueError(f"No features found in {path}")
+
+    # Shapely understands GeoJSON geometry directly, so there is no need to
+    # walk the nested coordinate lists by hand. This is what makes holes and
+    # multi-part boundaries work.
+    geometries = [shape(feature["geometry"]) for feature in features]
+    geometry = unary_union(geometries) if len(geometries) > 1 else geometries[0]
+
+    # Boundaries exported from 3D tools carry a height on every coordinate.
+    # Drop it - we are matching in two dimensions.
+    if geometry.has_z:
+        geometry = force_2d(geometry)
+
+    # Fix self-intersections, which would otherwise make 'contains' unreliable.
+    if not geometry.is_valid:
+        geometry = geometry.buffer(0)
+
+    source_crs = source_crs or detect_crs(data)
+    if source_crs != target_crs:
+        # Build the transformer once and reuse it, rather than per coordinate.
+        project = pyproj.Transformer.from_crs(
+            pyproj.CRS(source_crs), pyproj.CRS(target_crs), always_xy=True
+        ).transform
+        geometry = transform(project, geometry)
+
+    properties = features[0].get("properties", {}) or {}
+    return geometry, properties
+
+
+def buffered_bounds(geometry, buffer_m=DEFAULT_BUFFER_M):
+    """
+    Return the geometry's bounding box widened by buffer_m on every side.
+
+    Note the signs: the minimum corner moves down and left, the maximum corner
+    moves up and right. Adding the buffer to all four would slide the box
+    diagonally instead of growing it, and could drop points near the
+    south-western edge.
+    """
+    minx, miny, maxx, maxy = geometry.bounds
+    return (minx - buffer_m, miny - buffer_m, maxx + buffer_m, maxy + buffer_m)
+
+
+############################################################
+# 3. The matching itself
+############################################################
+
+def find_oas_in_area(geometry, year="2021", buffer_m=DEFAULT_BUFFER_M,
+                     centroids=None):
+    """
+    Find the Output Areas whose centroid lies inside the boundary.
+
+    Args:
+        geometry: Boundary as a Shapely geometry in EPSG:27700.
+        year (str): Census year - '2021', '2011' or '2001'.
+        buffer_m (int): Bounding-box buffer in metres.
+        centroids (list): Supply [[code, x, y], ...] to skip the API call
+            (used by the tests, and if you prefer a local centroids file).
+
+    Returns:
+        tuple: (inside, outside) - two lists of [code, x, y]. 'outside' holds
+        the centroids that were in the box but not in the boundary, which is
+        what the sense-check map draws in grey.
+    """
+    if centroids is None:
+        centroids = census_api.fetch_oa_centroids(
+            buffered_bounds(geometry, buffer_m), year=year
+        )
+
+    inside, outside = [], []
+    for code, x, y in centroids:
+        if geometry.contains(Point(x, y)):
+            inside.append([code, x, y])
+        else:
+            outside.append([code, x, y])
+
+    return inside, outside
+
+
+############################################################
+# 4. Writing the results out
+############################################################
+
+def write_outputs(inside, properties, json_path=None, csv_path=None,
+                  property_map=None):
+    """
+    Write the matched OA list to disk.
+
+    Two formats, because they serve different purposes:
+
+      * JSON - the OA list with its coordinates and the parish details, handy
+        for reference or for feeding another script.
+      * CSV  - the lookup table step 2 needs: one row per OA, carrying the
+        parish and deanery it belongs to. Because the parish details come from
+        the boundary file's own properties, this is built for you.
+
+    To cover a whole diocese, run this once per parish and concatenate the CSVs.
+    """
+    property_map = property_map or PROPERTY_MAP
+    # Only map across properties the file actually has.
+    parish = {
+        column: properties[key]
+        for key, column in property_map.items()
+        if key in properties
+    }
+
+    if json_path:
+        os.makedirs(os.path.dirname(os.path.abspath(json_path)), exist_ok=True)
+        with open(json_path, "w") as handle:
+            json.dump(
+                {"parish": parish, "count": len(inside),
+                 "output_areas": [{"OA": c, "x": x, "y": y} for c, x, y in inside]},
+                handle, indent=2,
+            )
+
+    if csv_path:
+        os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
+        columns = ["OA"] + list(parish.keys())
+        with open(csv_path, "w", newline="") as handle:
+            writer = csv.writer(handle)
+            writer.writerow(columns)
+            for code, _x, _y in inside:
+                writer.writerow([code] + [parish[c] for c in columns[1:]])
+
+    return parish
+
+
+############################################################
+# 5. Sense-check map
+############################################################
+
+def make_sense_check_map(geometry, inside, outside, path,
+                         source_crs=TARGET_CRS):
+    """
+    Draw the boundary and the centroids so you can see the match worked.
+
+    Green markers are the OAs that were matched, grey ones were searched but
+    fell outside. If the green markers do not fill the shape, something has
+    gone wrong - most likely the projection.
+
+    Folium works in latitude/longitude, so everything is converted back to
+    EPSG:4326 for display only.
+    """
+    import folium
+
+    to_wgs84 = pyproj.Transformer.from_crs(
+        pyproj.CRS(source_crs), pyproj.CRS("EPSG:4326"), always_xy=True
+    ).transform
+
+    outline = transform(to_wgs84, geometry)
+    centre = outline.centroid
+
+    # OpenStreetMap tiles need no API key, so the map works out of the box.
+    area_map = folium.Map(location=[centre.y, centre.x], zoom_start=14,
+                          tiles="OpenStreetMap")
+
+    folium.GeoJson(
+        outline.__geo_interface__,
+        name="Boundary",
+        style_function=lambda _: {"color": "#2b6cb0", "weight": 3,
+                                  "fillOpacity": 0.08},
+    ).add_to(area_map)
+
+    for label, points, colour in [("Outside", outside, "#9aa5b1"),
+                                  ("Inside", inside, "#2f855a")]:
+        layer = folium.FeatureGroup(name=f"{label} ({len(points)})")
+        for code, x, y in points:
+            lon, lat = to_wgs84(x, y)
+            folium.CircleMarker(
+                location=[lat, lon], radius=4, color=colour, weight=1,
+                fill=True, fill_opacity=0.9, tooltip=f"{code} ({label.lower()})",
+            ).add_to(layer)
+        layer.add_to(area_map)
+
+    folium.LayerControl().add_to(area_map)
+    area_map.save(path)
+    return path
+
+
+############################################################
+# 6. Running it
+############################################################
+
+def main():
+    # Imported here so the functions above can be used (and tested) without a
+    # variables_pip.py being present.
+    from variables_pip import polygon_p, oa_json_output, oa_csv_output
+
+    try:
+        from variables_pip import census_year
+    except ImportError:
+        census_year = "2021"
+
+    try:
+        from variables_pip import map_output
+    except ImportError:
+        map_output = "sense_check_map.html"
+
+    geometry, properties = load_boundary(polygon_p)
+    print(f"Boundary loaded: {properties.get('name', '(unnamed)')}")
+    print(f"  area: {geometry.area / 1e6:.2f} km2")
+
+    inside, outside = find_oas_in_area(geometry, year=census_year)
+    print(f"  {len(inside) + len(outside)} centroids searched, "
+          f"{len(inside)} inside the boundary")
+
+    write_outputs(inside, properties, oa_json_output, oa_csv_output)
+    print(f"  written: {oa_json_output}")
+    print(f"  written: {oa_csv_output}")
+
+    make_sense_check_map(geometry, inside, outside, map_output)
+    print(f"  written: {map_output}  <- open this to check the match")
+
+
+if __name__ == "__main__":
+    main()

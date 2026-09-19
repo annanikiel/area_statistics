@@ -7,3 +7,6 @@ process_geojson.py
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Generated results (re-created by running the scripts)
+output/

@@ -1,0 +1,24 @@
+# Install with:  pip install -r requirements.txt
+#
+# Minimum versions are given rather than exact pins, so this keeps working as
+# the libraries move on. If a future release ever breaks something, pin the
+# line that broke to the version below.
+
+# Geometry. Version 2.0 changed how shapely is imported, and this project
+# uses the newer style, so 2.0 is the floor.
+shapely>=2.0
+
+# Reprojecting between coordinate systems (EPSG:3857 -> EPSG:27700 etc.)
+pyproj>=3.4
+
+# The sense-check map
+folium>=0.14
+
+# Data handling for the aggregation step
+pandas>=2.0
+
+# Talking to the ONS and Nomis APIs
+requests>=2.28
+
+# Running the tests (not needed just to use the scripts)
+pytest>=7.0
