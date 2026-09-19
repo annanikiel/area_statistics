@@ -9,6 +9,7 @@ Run them with:
     pytest
 """
 
+import csv
 import json
 import os
 import sys
@@ -332,3 +333,70 @@ def test_nomis_dimensions_finds_the_category_columns():
     header = ["DATE", "DATE_NAME", "GEOGRAPHY", "GEOGRAPHY_NAME", "GEOGRAPHY_CODE",
               "C_SEX", "C_SEX_NAME", "MEASURES", "MEASURES_NAME", "OBS_VALUE"]
     assert census_api._nomis_dimensions(header) == ["C_SEX"]
+
+
+############################################################
+# Category ordering and nesting (offline, via the cache)
+############################################################
+
+def _seed_nomis_cache(tmp_path, dataset_id, oa_codes, rows):
+    """Write a fake Nomis response into the cache so no network is needed."""
+    key = f"{dataset_id}|None|{','.join(sorted(oa_codes))}"
+    path = census_api._cache_path("nomis", key, ".csv", str(tmp_path))
+    with open(path, "w", newline="") as handle:
+        csv.writer(handle).writerows(rows)
+    return path
+
+
+def test_categories_keep_the_order_ons_publishes(tmp_path):
+    """
+    Regression test. Pivoting sorts columns alphabetically, which would put
+    'Aged 10 to 14 years' before 'Aged 4 years and under'. The sort order
+    Nomis supplies is used instead.
+    """
+    header = ["GEOGRAPHY_CODE", "C_AGE", "C_AGE_NAME", "C_AGE_SORTORDER",
+              "MEASURES", "MEASURES_NAME", "OBS_VALUE"]
+    categories = [("0", "Total", 0), ("1", "Aged 4 years and under", 1),
+                  ("2", "Aged 5 to 9 years", 2), ("3", "Aged 10 to 14 years", 3)]
+    rows = [header]
+    for code, name, order in categories:
+        rows.append(["A1", code, name, order, "20100", "Value", 10])
+
+    _seed_nomis_cache(tmp_path, "NM_TEST_1", ["A1"], rows)
+    frame = census_api.fetch_nomis_dataset("NM_TEST_1", ["A1"],
+                                           cache_dir=str(tmp_path))
+
+    assert list(frame.columns) == ["Total", "Aged 4 years and under",
+                                   "Aged 5 to 9 years", "Aged 10 to 14 years"]
+
+
+def test_nested_categories_are_recorded(tmp_path):
+    """Tables whose categories nest are flagged, so a reader is told the
+    sub-categories sit inside their parent rather than beside it."""
+    header = ["GEOGRAPHY_CODE", "C_TEN", "C_TEN_NAME", "C_TEN_SORTORDER",
+              "MEASURES", "MEASURES_NAME", "OBS_VALUE"]
+    categories = [("0", "Total", 0), ("1", "Owned", 1),
+                  ("2", "Owned: Owns outright", 2)]
+    rows = [header] + [["A1", c, n, o, "20100", "Value", 5]
+                       for c, n, o in categories]
+
+    _seed_nomis_cache(tmp_path, "NM_TEST_2", ["A1"], rows)
+    frame = census_api.fetch_nomis_dataset("NM_TEST_2", ["A1"],
+                                           cache_dir=str(tmp_path))
+
+    assert frame.attrs["hierarchical"] is True
+    assert frame.attrs["depths"]["Owned"] == 0
+    assert frame.attrs["depths"]["Owned: Owns outright"] == 1
+
+
+def test_flat_table_is_not_marked_as_nested(tmp_path):
+    header = ["GEOGRAPHY_CODE", "C_SEX", "C_SEX_NAME", "C_SEX_SORTORDER",
+              "MEASURES", "MEASURES_NAME", "OBS_VALUE"]
+    rows = [header] + [["A1", c, n, o, "20100", "Value", 5] for c, n, o in
+                       [("0", "Total", 0), ("1", "Female", 1), ("2", "Male", 2)]]
+
+    _seed_nomis_cache(tmp_path, "NM_TEST_3", ["A1"], rows)
+    frame = census_api.fetch_nomis_dataset("NM_TEST_3", ["A1"],
+                                           cache_dir=str(tmp_path))
+
+    assert frame.attrs["hierarchical"] is False

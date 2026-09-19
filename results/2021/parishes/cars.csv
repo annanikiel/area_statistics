@@ -1,2 +1,2 @@
-ParishID,1 car or van in household,2 cars or vans in household,3 or more cars or vans in household,No cars or vans in household,Total,1 car or van in household_prop,2 cars or vans in household_prop,3 or more cars or vans in household_prop,No cars or vans in household_prop
-B006,4085.0,1114.0,225.0,4839.0,10263.0,0.3980317645912501,0.1085452596706616,0.021923414206372407,0.47149956153171585
+ParishID,Total,No cars or vans in household,1 car or van in household,2 cars or vans in household,3 or more cars or vans in household,No cars or vans in household_prop,1 car or van in household_prop,2 cars or vans in household_prop,3 or more cars or vans in household_prop
+B006,10263.0,4839.0,4085.0,1114.0,225.0,0.47149956153171585,0.3980317645912501,0.1085452596706616,0.021923414206372407

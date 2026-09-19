@@ -229,11 +229,18 @@ def build_dashboard_data(results_dir, year, built, report, docs_dir,
                 }
             return out
 
+        # Nested categories ("One-person household" and, beneath it,
+        # "One-person household: Aged 66 years and over") are recorded so the
+        # dashboard can indent them and say that the parts overlap.
+        depths = [str(c).count(":") for c in categories]
+
         payload = {
             "dataset": item["dataset"],
             "title": item["description"],
             "group": item["group"],
             "categories": categories,
+            "depths": depths,
+            "hierarchical": any(d > 0 for d in depths),
             "parishes": rows(parish),
             "deaneries": rows(deanery),
         }
@@ -261,7 +268,21 @@ def build_dashboard_data(results_dir, year, built, report, docs_dir,
     with open(os.path.join(data_dir, "index.json"), "w") as handle:
         json.dump(index, handle, indent=1)
 
+    # The dashboard reads a plain script rather than fetching the JSON, so the
+    # page also works when opened straight from disk (fetch() is blocked on
+    # file:// URLs, a <script src> is not).
+    bundle = {"index": index, "tables": {}}
+    for item in catalogue:
+        with open(os.path.join(data_dir, f"{item['dataset']}.json")) as handle:
+            bundle["tables"][item["dataset"]] = json.load(handle)
+
+    with open(os.path.join(docs_dir, "data.js"), "w") as handle:
+        handle.write("window.CENSUS_DATA = ")
+        json.dump(bundle, handle, separators=(",", ":"))
+        handle.write(";\n")
+
     print(f"  written: {data_dir}/ ({len(catalogue)} tables + index)")
+    print(f"  written: {os.path.join(docs_dir, 'data.js')}")
     return index
 
 

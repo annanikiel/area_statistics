@@ -350,6 +350,18 @@ def fetch_nomis_dataset(dataset_id, oa_codes, dimension=None, cache_dir=None,
     wide.index.name = "OA"
     wide.columns.name = None
 
+    # Keep the categories in the order ONS publishes them. Pivoting sorts
+    # columns alphabetically, which would put "Aged 10 to 14 years" before
+    # "Aged 4 years and under" - nonsense for an age table, and just as wrong
+    # for any other ordered category.
+    sort_column = f"{dimension}_SORTORDER"
+    if sort_column in frame.columns:
+        order = (frame.groupby(f"{dimension}_NAME")[sort_column]
+                 .min().astype(float).sort_values().index.tolist())
+        ordered = [c for c in order if c in wide.columns]
+        ordered += [c for c in wide.columns if c not in ordered]
+        wide = wide[ordered]
+
     # Identify the total column so downstream proportion maths has one to use.
     total_names = frame[frame[dimension].astype(str) == "0"][f"{dimension}_NAME"].unique()
     if len(total_names) == 0:
@@ -359,6 +371,7 @@ def fetch_nomis_dataset(dataset_id, oa_codes, dimension=None, cache_dir=None,
 
     if total_names[0] in wide.columns:
         wide = wide.rename(columns={total_names[0]: "Total"})
+        wide = wide[["Total"] + [c for c in wide.columns if c != "Total"]]
 
     # Drop derived statistics so they are never summed by mistake.
     dropped = []
@@ -368,6 +381,11 @@ def fetch_nomis_dataset(dataset_id, oa_codes, dimension=None, cache_dir=None,
             wide = wide.drop(columns=dropped)
 
     # Record what happened so callers can report it (pandas keeps .attrs).
+    # Some tables nest their categories ("One-person household" and, beneath
+    # it, "One-person household: Aged 66 years and over"). Recording the depth
+    # lets a reader see that the parts do not simply add up to the total.
+    wide.attrs["depths"] = {c: str(c).count(":") for c in wide.columns}
+    wide.attrs["hierarchical"] = any(v > 0 for v in wide.attrs["depths"].values())
     wide.attrs["dataset_id"] = dataset_id
     wide.attrs["dimension"] = dimension
     wide.attrs["dropped_columns"] = dropped
