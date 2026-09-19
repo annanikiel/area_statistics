@@ -203,6 +203,132 @@ def find_oas_in_area(geometry, year="2021", buffer_m=DEFAULT_BUFFER_M,
 
 
 ############################################################
+# 3b. Several areas in one file
+############################################################
+
+def load_boundaries(path, source_crs=None, target_crs=TARGET_CRS):
+    """
+    Load a boundary file where each feature is a separate area.
+
+    Where load_boundary() merges everything into one shape, this keeps the
+    features apart - one per parish - so a whole diocese can be processed in
+    a single run.
+
+    Returns:
+        list: [(geometry, properties), ...] in target_crs.
+    """
+    with open(path) as handle:
+        data = json.load(handle)
+
+    features = data.get("features")
+    if not features:
+        raise ValueError(f"No features found in {path}")
+
+    source_crs = source_crs or detect_crs(data)
+    project = None
+    if source_crs != target_crs:
+        project = pyproj.Transformer.from_crs(
+            pyproj.CRS(source_crs), pyproj.CRS(target_crs), always_xy=True
+        ).transform
+
+    areas = []
+    for feature in features:
+        geometry = shape(feature["geometry"])
+        if geometry.has_z:
+            geometry = force_2d(geometry)
+        if not geometry.is_valid:
+            geometry = geometry.buffer(0)
+        if project is not None:
+            geometry = transform(project, geometry)
+        areas.append((geometry, feature.get("properties", {}) or {}))
+
+    return areas
+
+
+def match_all_areas(areas, year="2021", buffer_m=DEFAULT_BUFFER_M,
+                    centroids=None):
+    """
+    Match Output Areas to every area in one pass.
+
+    The centroids are downloaded once for the combined extent of all the
+    areas, then each area is tested against that one set. For a diocese this
+    is far quicker than fetching per parish.
+
+    Args:
+        areas (list): [(geometry, properties), ...] from load_boundaries.
+        year (str): Census year.
+        buffer_m (int): Bounding-box buffer in metres.
+        centroids (list): Supply [[code, x, y], ...] to skip the API call.
+
+    Returns:
+        tuple: (matches, report)
+            matches - [{'OA', 'x', 'y', **properties}, ...]
+            report  - counts, plus any OA claimed by more than one area.
+    """
+    if centroids is None:
+        # One box covering everything, then one download.
+        boxes = [buffered_bounds(geometry, buffer_m) for geometry, _ in areas]
+        combined = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+                    max(b[2] for b in boxes), max(b[3] for b in boxes))
+        centroids = census_api.fetch_oa_centroids(combined, year=year)
+
+    matches = []
+    claimed = {}          # OA code -> list of areas that contain it
+    per_area = {}
+
+    for geometry, properties in areas:
+        label = properties.get("id") or properties.get("name") or len(per_area)
+        # Testing the bounding box first is much cheaper than the full
+        # geometry, and skips most centroids straight away.
+        minx, miny, maxx, maxy = geometry.bounds
+        count = 0
+        for code, x, y in centroids:
+            if not (minx <= x <= maxx and miny <= y <= maxy):
+                continue
+            if geometry.contains(Point(x, y)):
+                matches.append({"OA": code, "x": x, "y": y, **properties})
+                claimed.setdefault(code, []).append(label)
+                count += 1
+        per_area[label] = count
+
+    overlaps = {code: owners for code, owners in claimed.items()
+                if len(owners) > 1}
+
+    report = {
+        "areas": len(areas),
+        "centroids_searched": len(centroids),
+        "matched": len(claimed),
+        "rows": len(matches),
+        "per_area": per_area,
+        "empty_areas": [label for label, n in per_area.items() if n == 0],
+        "overlaps": overlaps,
+    }
+    return matches, report
+
+
+def write_combined_lookup(matches, csv_path, property_map=None):
+    """
+    Write the lookup covering every area, for step 2 to aggregate.
+
+    One row per Output Area per area that claims it.
+    """
+    property_map = property_map or PROPERTY_MAP
+    os.makedirs(os.path.dirname(os.path.abspath(csv_path)), exist_ok=True)
+
+    # Keep only the properties that are actually present, in a stable order.
+    present = [key for key in property_map if any(key in m for m in matches)]
+    columns = ["OA"] + [property_map[key] for key in present]
+
+    with open(csv_path, "w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(columns)
+        for match in matches:
+            writer.writerow([match["OA"]] + [match.get(key, "") for key in present])
+
+    return columns
+
+
+############################################################
 # 4. Writing the results out
 ############################################################
 
